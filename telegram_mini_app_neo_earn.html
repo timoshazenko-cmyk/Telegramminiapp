@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Neo Earn - Telegram Mini App</title>
+    <!-- Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        tgBg: 'var(--tg-theme-bg-color, #0f172a)',
+                        tgSecBg: 'var(--tg-theme-secondary-bg-color, #1e293b)',
+                        tgText: 'var(--tg-theme-text-color, #f8fafc)',
+                        tgHint: 'var(--tg-theme-hint-color, #94a3b8)',
+                        tgBtn: 'var(--tg-theme-button-color, #6366f1)',
+                        tgBtnText: 'var(--tg-theme-button-text-color, #ffffff)',
+                        neonBlue: '#3b82f6',
+                        neonPurple: '#8b5cf6',
+                        neonPink: '#ec4899',
+                        neonCyan: '#06b6d4',
+                        neonGreen: '#10b981'
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { opacity: '0.8', filter: 'drop-shadow(0 0 15px rgba(139, 92, 246, 0.6))' },
+                            '50%': { opacity: '1', filter: 'drop-shadow(0 0 25px rgba(236, 72, 153, 0.8))' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-8px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            background-color: var(--tg-theme-bg-color, #0b0f19);
+            color: var(--tg-theme-text-color, #f8fafc);
+        }
+
+        /* Glassmorphic elements */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-button {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* Tap Floating Number Animation */
+        @keyframes tapFloat {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { opacity: 0.8; transform: translateY(-40px) scale(1.3); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1); }
+        }
+        .tap-number {
+            position: absolute;
+            pointer-events: none;
+            animation: tapFloat 0.8s ease-out forwards;
+            font-weight: 800;
+            text-shadow: 0 0 10px rgba(139, 92, 246, 0.8);
+        }
+
+        /* Wheel Canvas Styling */
+        #wheelCanvas {
+            filter: drop-shadow(0 0 15px rgba(139, 92, 246, 0.3));
+        }
+
+        /* Hide scrollbars */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between overflow-hidden font-sans">
+
+    <!-- Top User Bar -->
+    <header class="w-full px-4 pt-3 pb-2 flex items-center justify-between glass-panel z-20 border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+            <div id="userAvatar" class="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center font-bold text-white shadow-lg border border-white/20">
+                U
+            </div>
+            <div>
+                <h2 id="userName" class="text-sm font-bold tracking-wide text-white flex items-center gap-1">
+                    User <i class="fa-solid fa-circle-check text-blue-400 text-xs"></i>
+                </h2>
+                <div class="flex items-center gap-1.5 text-xs text-purple-300 font-medium">
+                    <span id="userLevelTitle">Lvl 1 • Novice</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center bg-slate-900/80 px-3 py-1.5 rounded-full border border-purple-500/30 shadow-inner">
+            <i class="fa-solid fa-coins text-amber-400 mr-2 text-sm animate-pulse"></i>
+            <span id="userCoins" class="font-extrabold text-base text-amber-300 tracking-wider">0</span>
+        </div>
+    </header>
+
+    <!-- Main Content Containers -->
+    <main class="flex-1 relative overflow-y-auto no-scrollbar p-4 flex flex-col items-center justify-start">
+
+        <!-- 1. TAB: TAPPER (CLICKER) -->
+        <section id="tab-tap" class="tab-content w-full h-full flex flex-col items-center justify-between py-2">
+            <!-- Progress / Level Bar -->
+            <div class="w-full glass-panel p-3 rounded-2xl flex flex-col gap-1.5">
+                <div class="flex justify-between items-center text-xs font-semibold">
+                    <span class="text-slate-400">Прогресс уровня</span>
+                    <span id="levelProgressText" class="text-purple-300">0 / 1000</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-3 overflow-hidden p-0.5 border border-slate-800">
+                    <div id="levelProgressBar" class="bg-gradient-to-r from-purple-500 via-pink-500 to-amber-400 h-full rounded-full transition-all duration-300 shadow-lg" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Big Interactive Coin Button -->
+            <div class="relative my-auto flex items-center justify-center">
+                <!-- Glowing Outer Rings -->
+                <div class="absolute w-64 h-64 rounded-full bg-gradient-to-r from-purple-600/30 to-pink-600/30 animate-pulse-glow filter blur-xl"></div>
+                
+                <button id="tapBtn" class="relative w-56 h-56 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-1.5 shadow-[0_0_50px_rgba(139,92,246,0.5)] active:scale-95 transition-transform duration-100 flex items-center justify-center outline-none">
+                    <div class="w-full h-full rounded-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 flex flex-col items-center justify-center border-4 border-purple-400/40 shadow-inner">
+                        <i class="fa-solid fa-[#ffffff] fa-gem text-6xl text-transparent bg-clip-text bg-gradient-to-tr from-cyan-400 via-purple-300 to-pink-400 animate-float"></i>
+                        <span class="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">Жми!</span>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Energy Bar & Multi-tap Info -->
+            <div class="w-full glass-panel p-3.5 rounded-2xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center border border-amber-500/30 text-amber-400">
+                        <i class="fa-solid fa-[#f59e0b] fa-bolt text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium">Энергия</div>
+                        <div class="text-sm font-bold text-white"><span id="energyVal">1000</span> / <span id="maxEnergyVal">1000</span></div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs text-purple-400 font-semibold bg-purple-950/60 px-2.5 py-1 rounded-full border border-purple-500/30">+<span id="clickPowerVal">1</span> за тап</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. TAB: WHEEL OF FORTUNE (SPIN) -->
+        <section id="tab-spin" class="tab-content w-full h-full flex flex-col items-center justify-between py-2 hidden">
+            <div class="text-center">
+                <h2 class="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">Колесо Фортуны</h2>
+                <p class="text-xs text-slate-400 mt-1">Крутите колесо каждый день и получайте призы!</p>
+            </div>
+
+            <!-- Wheel Container -->
+            <div class="relative my-auto flex items-center justify-center">
+                <!-- Indicator Arrow -->
+                <div class="absolute -top-4 z-10 text-amber-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
+                    <i class="fa-solid fa-caret-down text-4xl"></i>
+                </div>
+                <canvas id="wheelCanvas" width="300" height="300" class="max-w-[290px] max-h-[290px]"></canvas>
+            </div>
+
+            <!-- Spin Controls -->
+            <div class="w-full flex flex-col items-center gap-2">
+                <button id="spinBtn" class="w-full py-3.5 px-6 rounded-2xl font-bold text-white glass-button shadow-[0_0_20px_rgba(99,102,241,0.5)] active:scale-98 transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-arrows-spin text-lg"></i> Вращать (1 попытка)
+                </button>
+                <span id="spinTimer" class="text-xs text-slate-400 hidden"><i class="fa-regular fa-clock mr-1"></i> Следующий вращение через: <span id="timerCountdown" class="text-slate-200 font-semibold">24:00:00</span></span>
+            </div>
+        </section>
+
+        <!-- 3. TAB: TASKS -->
+        <section id="tab-tasks" class="tab-content w-full h-full flex flex-col gap-3 py-2 hidden">
+            <div class="mb-1">
+                <h2 class="text-xl font-extrabold text-white">Задания</h2>
+                <p class="text-xs text-slate-400">Выполняйте простые квесты и зарабатывайте больше монет</p>
+            </div>
+
+            <div class="flex flex-col gap-2.5 overflow-y-auto max-h-[calc(100vh-220px)] pr-0.5 no-scrollbar">
+                <!-- Daily Check-in Task -->
+                <div class="glass-panel p-3.5 rounded-2xl flex items-center justify-between border-l-4 border-l-purple-500">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400">
+                            <i class="fa-solid fa-calendar-check text-lg"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white">Ежедневный вход</div>
+                            <div class="text-xs text-amber-400 font-semibold">+500 монет</div>
+                        </div>
+                    </div>
+                    <button onclick="claimTask(this, 500)" class="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95">Забрать</button>
+                </div>
+
+                <!-- Telegram Channel Task -->
+                <div class="glass-panel p-3.5 rounded-2xl flex items-center justify-between border-l-4 border-l-blue-500">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
+                            <i class="fa-brands fa-telegram text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white">Подписка на канал</div>
+                            <div class="text-xs text-amber-400 font-semibold">+1,000 монет</div>
+                        </div>
+                    </div>
+                    <button onclick="claimTask(this, 1000)" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95">Выполнить</button>
+                </div>
+
+                <!-- Invite Friends Task -->
+                <div class="glass-panel p-3.5 rounded-2xl flex items-center justify-between border-l-4 border-l-pink-500">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center text-pink-400">
+                            <i class="fa-solid fa-user-plus text-lg"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white">Пригласить друга</div>
+                            <div class="text-xs text-amber-400 font-semibold">+2,500 монет</div>
+                        </div>
+                    </div>
+                    <button onclick="shareInvite()" class="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95">Позвать</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. TAB: LEADERBOARD -->
+        <section id="tab-leaderboard" class="tab-content w-full h-full flex flex-col gap-3 py-2 hidden">
+            <div class="mb-1">
+                <h2 class="text-xl font-extrabold text-white">Топ Игроков</h2>
+                <p class="text-xs text-slate-400">Лучшие кликеры этого сезона</p>
+            </div>
+
+            <div class="flex flex-col gap-2 overflow-y-auto max-h-[calc(100vh-220px)] pr-0.5 no-scrollbar" id="leaderboardList">
+                <!-- Dynamically populated or static mock items -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="w-full glass-panel border-t border-slate-800 px-3 py-2 flex justify-around items-center z-20">
+        <button onclick="switchTab('tap')" id="nav-tap" class="nav-btn flex flex-col items-center gap-1 text-purple-400 transition-colors">
+            <i class="fa-solid fa-hand-pointer text-lg"></i>
+            <span class="text-[10px] font-bold">Кликер</span>
+        </button>
+        <button onclick="switchTab('spin')" id="nav-spin" class="nav-btn flex flex-col items-center gap-1 text-slate-400 transition-colors">
+            <i class="fa-solid fa-dharmachakra text-lg"></i>
+            <span class="text-[10px] font-bold">Колесо</span>
+        </button>
+        <button onclick="switchTab('tasks')" id="nav-tasks" class="nav-btn flex flex-col items-center gap-1 text-slate-400 transition-colors">
+            <i class="fa-solid fa-list-check text-lg"></i>
+            <span class="text-[10px] font-bold">Задания</span>
+        </button>
+        <button onclick="switchTab('leaderboard')" id="nav-leaderboard" class="nav-btn flex flex-col items-center gap-1 text-slate-400 transition-colors">
+            <i class="fa-solid fa-trophy text-lg"></i>
+            <span class="text-[10px] font-bold">Лидеры</span>
+        </button>
+    </nav>
+
+    <!-- Modal / Toast Notification -->
+    <div id="toast" class="fixed top-14 left-1/2 -translate-x-1/2 glass-panel border border-purple-500/50 text-white px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 transform -translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-green-400"></i>
+        <span id="toastMsg" class="text-xs font-semibold">Сообщение</span>
+    </div>
+
+    <!-- AUDIO SYNTHESIZER FOR SOUND EFFECTS (Web Audio API) -->
+    <script>
+        // Web Audio API Sound Generator (No external assets required!)
+        class SoundFX {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            playTap() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.05);
+                
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.05);
+            }
+
+            playWin() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const now = this.ctx.currentTime;
+                const notes = [400, 520, 660, 880];
+                notes.forEach((freq, index) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + index * 0.08);
+                    gain.gain.setValueAtTime(0.2, now + index * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + index * 0.08 + 0.2);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + index * 0.08);
+                    osc.stop(now + index * 0.08 + 0.2);
+                });
+            }
+
+            playTick() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.02);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.02);
+            }
+        }
+
+        const sound = new SoundFX();
+    </script>
+
+    <!-- MAIN APP LOGIC -->
+    <script>
+        // Initial State
+        const state = {
+            coins: 1250,
+            level: 1,
+            levelProgress: 250,
+            levelMax: 1000,
+            energy: 1000,
+            maxEnergy: 1000,
+            clickPower: 1,
+            lastSpinTime: null,
+            canSpin: true
+        };
+
+        // Telegram Web App SDK Initialization
+        const tg = window.Telegram?.WebApp;
+
+        if (tg) {
+            tg.ready();
+            tg.expand();
+            // Apply Telegram Theme Colors if available
+            document.body.style.setProperty('--tg-theme-bg-color', tg.backgroundColor || '#0b0f19');
+            document.body.style.setProperty('--tg-theme-text-color', tg.textColor || '#f8fafc');
+
+            // Setup User Info from Telegram
+            if (tg.initDataUnsafe?.user) {
+                const user = tg.initDataUnsafe.user;
+                document.getElementById('userName').innerText = user.first_name + (user.last_name ? ` ${user.last_name}` : '');
+                if (user.photo_url) {
+                    document.getElementById('userAvatar').innerHTML = `<img src="${user.photo_url}" class="w-full h-full rounded-full object-cover"/>`;
+                } else {
+                    document.getElementById('userAvatar').innerText = user.first_name.charAt(0);
+                }
+            }
+        }
+
+        // Haptic Feedback Helper
+        function triggerHaptic(type = 'light') {
+            if (tg && tg.HapticFeedback) {
+                if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+                if (type === 'medium') tg.HapticFeedback.impactOccurred('medium');
+                if (type === 'heavy') tg.HapticFeedback.impactOccurred('heavy');
+                if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+            }
+        }
+
+        // UI Updates
+        function updateUI() {
+            document.getElementById('userCoins').innerText = state.coins.toLocaleString();
+            document.getElementById('energyVal').innerText = state.energy;
+            document.getElementById('maxEnergyVal').innerText = state.maxEnergy;
+            document.getElementById('clickPowerVal').innerText = state.clickPower;
+            document.getElementById('userLevelTitle').innerText = `Lvl ${state.level} • Hunter`;
+            
+            // Progress bar
+            const pct = Math.min(100, Math.floor((state.levelProgress / state.levelMax) * 100));
+            document.getElementById('levelProgressBar').style.width = `${pct}%`;
+            document.getElementById('levelProgressText').innerText = `${state.levelProgress} / ${state.levelMax}`;
+        }
+
+        // Tab Switcher
+        function switchTab(tabId) {
+            triggerHaptic('light');
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('text-purple-400');
+                el.classList.add('text-slate-400');
+            });
+
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`nav-${tabId}`).classList.add('text-purple-400');
+            document.getElementById(`nav-${tabId}`).classList.remove('text-slate-400');
+        }
+
+        // Toast Notification System
+        function showToast(message, isSuccess = true) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.innerText = message;
+            toastIcon.className = isSuccess ? "fa-solid fa-circle-check text-green-400" : "fa-solid fa-triangle-exclamation text-amber-400";
+            
+            toast.classList.remove('-translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('-translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        // TAPPER / CLICKER LOGIC
+        const tapBtn = document.getElementById('tapBtn');
+        
+        tapBtn.addEventListener('pointerdown', (e) => {
+            if (state.energy < state.clickPower) {
+                triggerHaptic('heavy');
+                showToast('Недостаточно энергии!', false);
+                return;
+            }
+
+            // Deduct Energy & Add Coins
+            state.energy -= state.clickPower;
+            state.coins += state.clickPower;
+            state.levelProgress += state.clickPower;
+
+            // Level Up Check
+            if (state.levelProgress >= state.levelMax) {
+                state.level += 1;
+                state.levelProgress = 0;
+                state.levelMax = Math.floor(state.levelMax * 1.5);
+                state.maxEnergy += 200;
+                state.energy = state.maxEnergy;
+                state.clickPower += 1;
+                confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+                showToast(`Поздравляем! Новый уровень: ${state.level}! 🎉`);
+                sound.playWin();
+            } else {
+                sound.playTap();
+            }
+
+            triggerHaptic('light');
+            updateUI();
+
+            // Floating Text Effect
+            createFloatingNumber(e.clientX, e.clientY, `+${state.clickPower}`);
+        });
+
+        function createFloatingNumber(x, y, text) {
+            const el = document.createElement('div');
+            el.className = 'tap-number text-purple-300 text-2xl';
+            el.innerText = text;
+
+            // Offset slightly for randomness
+            const randomX = (Math.random() - 0.5) * 20;
+            el.style.left = `${x + randomX}px`;
+            el.style.top = `${y - 20}px`;
+
+            document.body.appendChild(el);
+
+            setTimeout(() => {
+                el.remove();
+            }, 800);
+        }
+
+        // Energy Regeneration Loop
+        setInterval(() => {
+            if (state.energy < state.maxEnergy) {
+                state.energy = Math.min(state.maxEnergy, state.energy + 3);
+                updateUI();
+            }
+        }, 1000);
+
+        // WHEEL OF FORTUNE LOGIC
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinBtn = document.getElementById('spinBtn');
+
+        const sectors = [
+            { label: '100 🪙', val: 100, color: '#3b82f6' },
+            { label: '500 🪙', val: 500, color: '#8b5cf6' },
+            { label: 'JACKPOT! 🔥', val: 5000, color: '#ec4899' },
+            { label: '50 🪙', val: 50, color: '#1e293b' },
+            { label: '1,000 🪙', val: 1000, color: '#06b6d4' },
+            { label: '250 🪙', val: 250, color: '#10b981' },
+            { label: '2,000 🪙', val: 2000, color: '#f59e0b' },
+            { label: '0 🪙', val: 0, color: '#334155' }
+        ];
+
+        const numSectors = sectors.length;
+        const arc = (2 * Math.PI) / numSectors;
+        let startAngle = 0;
+        let isSpinning = false;
+
+        function drawWheel() {
+            const radius = canvas.width / 2;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            sectors.forEach((sector, i) => {
+                const angle = startAngle + i * arc;
+                ctx.beginPath();
+                ctx.arc(radius, radius, radius - 10, angle, angle + arc);
+                ctx.lineTo(radius, radius);
+                ctx.fillStyle = sector.color;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+                ctx.stroke();
+
+                // Draw Text Labels
+                ctx.save();
+                ctx.translate(radius, radius);
+                ctx.rotate(angle + arc / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 13px Outfit";
+                ctx.fillText(sector.label, radius - 25, 5);
+                ctx.restore();
+            });
+
+            // Outer Ring Glow
+            ctx.beginPath();
+            ctx.arc(radius, radius, radius - 5, 0, 2 * Math.PI);
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#8b5cf6';
+            ctx.stroke();
+        }
+
+        function spinWheel() {
+            if (isSpinning || !state.canSpin) return;
+
+            isSpinning = true;
+            spinBtn.disabled = true;
+            triggerHaptic('medium');
+
+            const spinRounds = 5 + Math.floor(Math.random() * 5);
+            const randomSectorIndex = Math.floor(Math.random() * numSectors);
+            const targetAngle = (2 * Math.PI * spinRounds) + ((numSectors - randomSectorIndex - 0.5) * arc);
+
+            let currentRotation = 0;
+            const duration = 4000; // 4 seconds
+            const startTime = performance.now();
+
+            function animateSpin(currentTime) {
+                const elapsed = currentTime - startTime;
+                if (elapsed < duration) {
+                    // Easing out cubic
+                    const progress = elapsed / duration;
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    
+                    startAngle = easeOut * targetAngle;
+                    drawWheel();
+                    sound.playTick();
+                    requestAnimationFrame(animateSpin);
+                } else {
+                    // Spin finished
+                    startAngle = targetAngle % (2 * Math.PI);
+                    drawWheel();
+                    isSpinning = false;
+
+                    const wonSector = sectors[randomSectorIndex];
+                    state.coins += wonSector.val;
+                    updateUI();
+
+                    triggerHaptic('success');
+                    sound.playWin();
+
+                    if (wonSector.val > 0) {
+                        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                        showToast(`Вы выиграли ${wonSector.label}! 🎉`);
+                    } else {
+                        showToast(`Увы, в этот раз 0 монет!`, false);
+                    }
+                }
+            }
+
+            requestAnimationFrame(animateSpin);
+        }
+
+        spinBtn.addEventListener('click', spinWheel);
+        drawWheel();
+
+        // TASK SECTION LOGIC
+        function claimTask(btn, reward) {
+            triggerHaptic('medium');
+            state.coins += reward;
+            updateUI();
+            sound.playWin();
+            confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
+
+            btn.disabled = true;
+            btn.className = "px-3.5 py-1.5 bg-emerald-600/50 text-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-default";
+            btn.innerHTML = `<i class="fa-solid fa-check"></i> Забрано`;
+            showToast(`Получено +${reward.toLocaleString()} монет!`);
+        }
+
+        function shareInvite() {
+            triggerHaptic('light');
+            if (tg && tg.openTelegramLink) {
+                tg.openTelegramLink(`https://t.me/share/url?url=https://t.me/your_bot_username?start=ref123&text=Присоединяйся%20к%20игре!`);
+            } else {
+                showToast("Ссылка для приглашения скопирована!");
+            }
+        }
+
+        // LEADERBOARD RENDER
+        const leaders = [
+            { rank: 1, name: 'Александр М.', coins: '1,450,200', avatar: '🥇' },
+            { rank: 2, name: 'Елена К.', coins: '980,400', avatar: '🥈' },
+            { rank: 3, name: 'Дмитрий В.', coins: '750,110', avatar: '🥉' },
+            { rank: 4, name: 'Crypto King', coins: '520,000', avatar: '⚡' },
+            { rank: 5, name: 'Satoshi_99', coins: '340,800', avatar: '🚀' },
+        ];
+
+        function renderLeaderboard() {
+            const list = document.getElementById('leaderboardList');
+            list.innerHTML = leaders.map(user => `
+                <div class="glass-panel p-3 rounded-2xl flex items-center justify-between border-b border-slate-800">
+                    <div class="flex items-center gap-3">
+                        <span class="w-6 text-center font-bold text-sm ${user.rank === 1 ? 'text-amber-400' : user.rank === 2 ? 'text-slate-300' : user.rank === 3 ? 'text-amber-600' : 'text-slate-500'}">
+                            #${user.rank}
+                        </span>
+                        <div class="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-base border border-slate-700">
+                            ${user.avatar}
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white">${user.name}</div>
+                            <div class="text-[11px] text-slate-400">Уровень ${10 - user.rank}</div>
+                        </div>
+                    </div>
+                    <div class="font-extrabold text-xs text-amber-300">
+                        ${user.coins} 🪙
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Init App
+        updateUI();
+        renderLeaderboard();
+    </script>
+</body>
+</html>
